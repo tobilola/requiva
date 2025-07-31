@@ -3,7 +3,11 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-from utils import USE_FIRESTORE
+from utils import USE_FIRESTORE, FB
+
+st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
+st.write("Secrets keys present:", list(FB.keys()))
+
 
 if USE_FIRESTORE:
     st.success("Connected to Firestore")
