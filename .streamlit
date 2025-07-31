@@ -1,0 +1,6 @@
+[theme]
+base="light"
+primaryColor="#2E7D32"           # Green for buttons and highlights
+backgroundColor="#FFFFFF"        # White main background
+secondaryBackgroundColor="#F5F7FA"  # Slight gray for sidebars or inputs
+textColor="#0B1B32"              # Deep navy for headings and body text
