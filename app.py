@@ -5,8 +5,10 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from utils import USE_FIRESTORE
 
-st.info("Connected to Firestore") if USE_FIRESTORE else st.warning("Using local CSV (dev mode)")
-
+if USE_FIRESTORE:
+    st.success("Connected to Firestore")
+else:
+    st.warning("Using local CSV (dev mode)")
 
 st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🧪", layout="wide")
 
