@@ -1,59 +1,71 @@
 # utils.py
 import os, json
-import pandas as pd
 from datetime import datetime
 from typing import Tuple
+
+import pandas as pd
 import streamlit as st
 
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
-    "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED"
+    "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED",
 ]
 
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
 
 USE_FIRESTORE = False
 db = None
-FB = st.secrets.get("firebase", {})
+FB = st.secrets.get("firebase", {})  # Secrets block: [firebase] ...
 
 def _init_firestore_from_secrets():
-    """Try Option A (full JSON), then Option B (3 fields). Return client or None."""
+    """
+    Try Option A (full JSON via service_account_json), then Option B (project_id, client_email, private_key).
+    Returns a Firestore client or None.
+    """
     if not FB:
+        st.info("No [firebase] secrets found; using CSV.")
         return None
+
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore
 
         cred = None
-        # OPTION A: full JSON blob
+
+        # OPTION A: Full JSON blob
         if FB.get("service_account_json"):
             sa_info = json.loads(FB["service_account_json"])
             cred = credentials.Certificate(sa_info)
 
         # OPTION B: 3 separate fields
         elif FB.get("project_id") and FB.get("client_email") and FB.get("private_key"):
+            # If the key came from a JSON field, it may contain literal '\n' sequences.
+            # Convert them to real newlines just in case.
+            key = FB["private_key"].replace("\\n", "\n")
             sa_info = {
                 "type": "service_account",
                 "project_id": FB["project_id"],
                 "private_key_id": "dummy",
-                "private_key": FB["private_key"],
+                "private_key": key,
                 "client_email": FB["client_email"],
                 "client_id": "dummy",
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
             cred = credentials.Certificate(sa_info)
 
-        if cred:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-            return firestore.client()
+        if cred is None:
+            st.warning("Firebase secrets present but incomplete. Provide either service_account_json OR project_id, client_email, and private_key.")
+            return None
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        return firestore.client()
 
     except Exception as e:
-        st.warning(f"⚠️ Firestore init failed; falling back to CSV. Details: {e}")
+        # Show the exception to help debug misformatted secrets (TOML/JSON issues).
+        st.warning(f"⚠️ Firestore init failed; falling back to CSV.\nDetails: {e}")
         return None
-
-    return None
 
 db = _init_firestore_from_secrets()
 USE_FIRESTORE = db is not None
@@ -64,6 +76,12 @@ def ensure_data_file():
     if not os.path.exists(DATA_PATH):
         pd.DataFrame(columns=REQUIRED_COLUMNS).to_csv(DATA_PATH, index=False)
 
+def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+    return df[REQUIRED_COLUMNS]
+
 def load_orders() -> pd.DataFrame:
     if USE_FIRESTORE and db is not None:
         docs = db.collection(COLLECTION).stream()
@@ -71,20 +89,15 @@ def load_orders() -> pd.DataFrame:
         df = pd.DataFrame(rows)
         if df.empty:
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
-        for col in REQUIRED_COLUMNS:
-            if col not in df.columns:
-                df[col] = None
-        return df[REQUIRED_COLUMNS]
+        return _ensure_columns(df)
     else:
         ensure_data_file()
         df = pd.read_csv(DATA_PATH)
-        for col in REQUIRED_COLUMNS:
-            if col not in df.columns:
-                df[col] = None
-        return df[REQUIRED_COLUMNS]
+        return _ensure_columns(df)
 
 def save_orders(df: pd.DataFrame):
-    df = df[REQUIRED_COLUMNS].copy()
+    df = _ensure_columns(df.copy())
+
     if USE_FIRESTORE and db is not None:
         from google.cloud import firestore as _fs  # ensure dependency present
         batch = db.batch()
@@ -93,6 +106,7 @@ def save_orders(df: pd.DataFrame):
             req_id = str(row["REQ#"])
             if not req_id or req_id == "nan":
                 continue
+            # Convert NaN to None for Firestore compatibility
             doc = {k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}
             batch.set(col_ref.document(req_id), doc, merge=True)
         batch.commit()
