@@ -1,6 +1,5 @@
 # Requiva
-data/*.csv
-.streamlit/secrets.toml
 __pycache__/
 *.pyc
-.DS_Store
+data/*.csv
+.streamlit/secrets.toml
