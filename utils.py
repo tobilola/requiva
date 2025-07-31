@@ -17,21 +17,46 @@ USE_FIRESTORE = False
 db = None
 FB = st.secrets.get("firebase", {})
 
-if FB and FB.get("service_account_json"):
+def _init_firestore_from_secrets():
+    """Try Option A (full JSON), then Option B (3 fields). Return client or None."""
+    if not FB:
+        return None
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore
 
-        sa_info = json.loads(FB["service_account_json"])  # full JSON blob from secrets
-        cred = credentials.Certificate(sa_info)
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-        db = firestore.client()
-        USE_FIRESTORE = True
-    except Exception as e:
-        st.warning(f"⚠️ Firestore init failed, using CSV. Details: {e}")
-        USE_FIRESTORE = False
+        cred = None
+        # OPTION A: full JSON blob
+        if FB.get("service_account_json"):
+            sa_info = json.loads(FB["service_account_json"])
+            cred = credentials.Certificate(sa_info)
 
+        # OPTION B: 3 separate fields
+        elif FB.get("project_id") and FB.get("client_email") and FB.get("private_key"):
+            sa_info = {
+                "type": "service_account",
+                "project_id": FB["project_id"],
+                "private_key_id": "dummy",
+                "private_key": FB["private_key"],
+                "client_email": FB["client_email"],
+                "client_id": "dummy",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+            cred = credentials.Certificate(sa_info)
+
+        if cred:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+            return firestore.client()
+
+    except Exception as e:
+        st.warning(f"⚠️ Firestore init failed; falling back to CSV. Details: {e}")
+        return None
+
+    return None
+
+db = _init_firestore_from_secrets()
+USE_FIRESTORE = db is not None
 COLLECTION = FB.get("collection", "requiva_orders")
 
 def ensure_data_file():
@@ -61,6 +86,7 @@ def load_orders() -> pd.DataFrame:
 def save_orders(df: pd.DataFrame):
     df = df[REQUIRED_COLUMNS].copy()
     if USE_FIRESTORE and db is not None:
+        from google.cloud import firestore as _fs  # ensure dependency present
         batch = db.batch()
         col_ref = db.collection(COLLECTION)
         for _, row in df.iterrows():
@@ -71,8 +97,7 @@ def save_orders(df: pd.DataFrame):
             batch.set(col_ref.document(req_id), doc, merge=True)
         batch.commit()
     else:
-        os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True
-        )
+        os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
         df.to_csv(DATA_PATH, index=False)
 
 def gen_req_id(df: pd.DataFrame) -> str:
