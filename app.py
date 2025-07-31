@@ -3,8 +3,10 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+from utils import USE_FIRESTORE
 
-from utils import load_orders, save_orders, gen_req_id, compute_total, validate_order, REQUIRED_COLUMNS
+st.info("Connected to Firestore") if USE_FIRESTORE else st.warning("Using local CSV (dev mode)")
+
 
 st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🧪", layout="wide")
 
