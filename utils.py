@@ -1,34 +1,100 @@
+# utils.py
 import os
 import pandas as pd
 from datetime import datetime
 from typing import Tuple
+import streamlit as st
 
-DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
-
+# ---------- Columns / schema ----------
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
     "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED"
 ]
 
+# ---------- Storage config ----------
+DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
+FB = st.secrets.get("firebase", {})
+USE_FIRESTORE = bool(FB and FB.get("private_key") and FB.get("client_email") and FB.get("project_id"))
+COLLECTION = FB.get("collection", "requiva_orders")
+
+db = None
+if USE_FIRESTORE:
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore
+        from google.oauth2 import service_account
+
+        # Build creds from Streamlit Secrets (service account)
+        creds_info = {
+            "type": "service_account",
+            "project_id": FB["project_id"],
+            "private_key_id": "dummy",  # not required, avoids missing key errors
+            "private_key": FB["private_key"],
+            "client_email": FB["client_email"],
+            "client_id": "dummy",
+            "token_uri": "https://oauth2.googleapis.com/token"
+        }
+        creds = service_account.Credentials.from_service_account_info(creds_info)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.Certificate(creds_info))
+        db = firestore.client()
+    except Exception as e:
+        st.warning(f"⚠️ Firestore init failed, falling back to CSV. Details: {e}")
+        USE_FIRESTORE = False
+
+# ---------- CSV fallbacks ----------
 def ensure_data_file():
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     if not os.path.exists(DATA_PATH):
         pd.DataFrame(columns=REQUIRED_COLUMNS).to_csv(DATA_PATH, index=False)
 
+# ---------- Public functions ----------
 def load_orders() -> pd.DataFrame:
-    ensure_data_file()
-    df = pd.read_csv(DATA_PATH)
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            df[col] = None
-    return df[REQUIRED_COLUMNS]
+    """Return DataFrame with REQUIRED_COLUMNS; Firestore if configured else CSV."""
+    if USE_FIRESTORE and db is not None:
+        docs = db.collection(COLLECTION).stream()
+        rows = []
+        for d in docs:
+            data = d.to_dict()
+            rows.append(data)
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return pd.DataFrame(columns=REQUIRED_COLUMNS)
+        # Normalize and order columns
+        for col in REQUIRED_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+        return df[REQUIRED_COLUMNS]
+    else:
+        ensure_data_file()
+        df = pd.read_csv(DATA_PATH)
+        for col in REQUIRED_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+        return df[REQUIRED_COLUMNS]
 
 def save_orders(df: pd.DataFrame):
-    df = df[REQUIRED_COLUMNS]
-    df.to_csv(DATA_PATH, index=False)
+    """Persist orders; upsert to Firestore by REQ# if configured, else CSV."""
+    df = df[REQUIRED_COLUMNS].copy()
+
+    if USE_FIRESTORE and db is not None:
+        batch = db.batch()
+        col_ref = db.collection(COLLECTION)
+        for _, row in df.iterrows():
+            req_id = str(row["REQ#"])
+            if not req_id or req_id == "nan":
+                continue
+            # convert NaNs to None for Firestore
+            doc = {k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}
+            batch.set(col_ref.document(req_id), doc, merge=True)
+        batch.commit()
+    else:
+        os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
+        df.to_csv(DATA_PATH, index=False)
 
 def gen_req_id(df: pd.DataFrame) -> str:
+    """Generate REQ-YYYY-NNNN based on existing rows."""
     year = datetime.now().strftime("%Y")
     prefix = f"REQ-{year}-"
     existing = df["REQ#"].dropna().astype(str).tolist()
@@ -60,4 +126,5 @@ def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
     if not vendor or str(vendor).strip() == "":
         return False, "VENDOR is required."
     return True, ""
+
 
