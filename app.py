@@ -161,7 +161,7 @@ with tab_export:
     df = load_orders()
     df = df[REQUIRED_COLUMNS]
 
-    # CSV download
+    # CSV download (always available)
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download CSV",
@@ -170,16 +170,20 @@ with tab_export:
         mime="text/csv",
     )
 
-    # Excel download
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Orders", index=False)
-    st.download_button(
-        label="Download Excel",
-        data=output.getvalue(),
-        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    # Excel download (only if an engine is available)
+    if EXCEL_ENGINE is None:
+        st.info("Excel export requires `openpyxl` or `xlsxwriter`. Install one in requirements.txt to enable XLSX download.")
+    else:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine=EXCEL_ENGINE) as writer:
+            df.to_excel(writer, sheet_name="Orders", index=False)
+        st.download_button(
+            label=f"Download Excel ({EXCEL_ENGINE})",
+            data=output.getvalue(),
+            file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
 
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
