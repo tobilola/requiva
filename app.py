@@ -1,20 +1,20 @@
 # app.py
 
-from datetime import datetime, date
+from datetime import date, datetime
 from io import BytesIO
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-# 🚩 MUST be first Streamlit call (before any st.write/st.title)
+# 🚩 MUST be the first Streamlit call
 st.set_page_config(
     page_title="Requiva — Smart Lab Order Intelligence",
     page_icon="🧪",
     layout="wide",
 )
 
-# Import everything we use from utils
+# Import utilities
 from utils import (
     USE_FIRESTORE,
     FB,
@@ -66,7 +66,6 @@ with tab_new:
     with col3:
         notes = st.text_area("NOTES", placeholder="Any notes (urgent, storage req., etc.)")
         ordered_by = st.text_input("ORDERED BY", placeholder="Name / ID")
-        # Use date.today() to give a pure date (avoids timezone warnings)
         date_ordered = st.date_input("DATE ORDERED", value=date.today())
         received_flag = st.checkbox("Item received?")
         date_received = st.date_input("DATE RECEIVED", value=date.today()) if received_flag else None
@@ -173,4 +172,3 @@ with tab_export:
 
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
-
