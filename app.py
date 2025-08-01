@@ -6,21 +6,33 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-# Try matplotlib, but don't fail the whole app if it's missing
+# ------- Optional plotting (don't crash if not installed) -------
 try:
     import matplotlib.pyplot as plt
     HAS_MPL = True
 except Exception:
     HAS_MPL = False
 
-# 🚩 MUST be the first Streamlit call (before any st.write/st.title)
+# ------- Pick an Excel writer engine that exists -------
+EXCEL_ENGINE = None
+try:
+    import openpyxl  # noqa: F401
+    EXCEL_ENGINE = "openpyxl"
+except Exception:
+    try:
+        import xlsxwriter  # noqa: F401
+        EXCEL_ENGINE = "xlsxwriter"
+    except Exception:
+        EXCEL_ENGINE = None
+
+# 🚩 MUST be the first Streamlit call
 st.set_page_config(
     page_title="Requiva — Smart Lab Order Intelligence",
     page_icon="🧪",
     layout="wide",
 )
 
-# Import utilities AFTER set_page_config (utils may show st.warning/info)
+# Import utilities AFTER set_page_config
 from utils import (
     USE_FIRESTORE,
     FB,
@@ -125,7 +137,7 @@ with tab_table:
     if vendor_filter:
         filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
     if grant_filter:
-        filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
+        filtered = filtered[filtered["GRANT USED"].astype(str).str_contains(grant_filter, case=False, na=False)]
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
@@ -183,7 +195,6 @@ with tab_export:
             file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-
 
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
