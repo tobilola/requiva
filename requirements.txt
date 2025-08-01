@@ -4,6 +4,7 @@ matplotlib==3.8.4
 firebase-admin==6.5.0
 google-cloud-firestore==2.16.0
 xlsxwriter==3.2.0
-openpyxl>=3.1.2
+openpyxl==3.1.2
+
 
 
