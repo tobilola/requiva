@@ -1,5 +1,3 @@
-# utils.py
-
 import os
 import json
 from datetime import datetime
@@ -12,6 +10,7 @@ REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
     "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED",
+    "RECEIVED BY", "ITEM LOCATION"
 ]
 
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
@@ -154,4 +153,3 @@ def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
     if not vendor or str(vendor).strip() == "":
         return False, "VENDOR is required."
     return True, ""
-
