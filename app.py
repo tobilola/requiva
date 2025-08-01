@@ -28,7 +28,7 @@ except Exception:
 # 🚩 MUST be the first Streamlit call
 st.set_page_config(
     page_title="Requiva — Smart Lab Order Intelligence",
-    page_icon="🧪",
+    page_icon="🦢",
     layout="wide",
 )
 
@@ -55,15 +55,15 @@ else:
 
 # --- App header ---
 st.title("Requiva — Smart Lab Order Intelligence")
-st.caption("Powered by TOBI HealthOps AI")
 
-tab_new, tab_table, tab_analytics, tab_export = st.tabs(
-    ["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"]
-)
 
 # ======================
 # ➕ New Order
 # ======================
+tab_new, tab_table, tab_analytics, tab_export = st.tabs(
+    ["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"]
+)
+
 with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
@@ -76,9 +76,7 @@ with tab_new:
         grant_used = st.text_input("GRANT USED", placeholder="e.g., R01CA12345 (comma separated)")
     with col2:
         qty = st.number_input("NUMBER OF ITEM *", min_value=0.0, value=0.0, step=1.0)
-        unit_price = st.number_input(
-            "AMOUNT PER ITEM *", min_value=0.0, value=0.0, step=1.0, format="%.2f"
-        )
+        unit_price = st.number_input("AMOUNT PER ITEM *", min_value=0.0, value=0.0, step=1.0, format="%.2f")
         po_source = st.selectbox("PO SOURCE", ["ShopBlue", "Stock Room", "External Vendor"], index=0)
         po_no = st.text_input("PO #", placeholder="e.g., PO-2025-00123")
     with col3:
@@ -87,6 +85,8 @@ with tab_new:
         date_ordered = st.date_input("DATE ORDERED", value=date.today())
         received_flag = st.checkbox("Item received?")
         date_received = st.date_input("DATE RECEIVED", value=date.today()) if received_flag else None
+        received_by = st.text_input("RECEIVED BY", placeholder="Receiver name") if received_flag else ""
+        location = st.text_input("ITEM LOCATION", placeholder="e.g., Freezer A, Shelf 2") if received_flag else ""
 
     submitted = st.button("Add Order", type="primary")
     if submitted:
@@ -111,6 +111,8 @@ with tab_new:
                 "ORDERED BY": ordered_by,
                 "DATE ORDERED": pd.to_datetime(date_ordered).date().isoformat() if date_ordered else "",
                 "DATE RECEIVED": pd.to_datetime(date_received).date().isoformat() if date_received else "",
+                "RECEIVED BY": received_by,
+                "ITEM LOCATION": location,
             }
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             save_orders(df)
@@ -129,15 +131,13 @@ with tab_table:
     with c2:
         grant_filter = st.text_input("Filter by GRANT USED")
     with c3:
-        po_source_filter = st.selectbox(
-            "Filter by PO SOURCE", ["All", "ShopBlue", "Stock Room", "External Vendor"]
-        )
+        po_source_filter = st.selectbox("Filter by PO SOURCE", ["All", "ShopBlue", "Stock Room", "External Vendor"])
 
     filtered = df.copy()
     if vendor_filter:
         filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
     if grant_filter:
-        filtered = filtered[filtered["GRANT USED"].astype(str).str_contains(grant_filter, case=False, na=False)]
+        filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
@@ -173,7 +173,6 @@ with tab_export:
     df = load_orders()
     df = df[REQUIRED_COLUMNS]
 
-    # CSV download (always available)
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download CSV",
@@ -182,7 +181,6 @@ with tab_export:
         mime="text/csv",
     )
 
-    # Excel download (only if an engine is available)
     if EXCEL_ENGINE is None:
         st.info("Excel export requires `openpyxl` or `xlsxwriter`. Install one in requirements.txt to enable XLSX download.")
     else:
@@ -198,3 +196,4 @@ with tab_export:
 
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
+st.caption("Powered by TOBI HealthOps AI")
