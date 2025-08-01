@@ -3,18 +3,24 @@
 from datetime import date, datetime
 from io import BytesIO
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-# 🚩 MUST be the first Streamlit call
+# Try matplotlib, but don't fail the whole app if it's missing
+try:
+    import matplotlib.pyplot as plt
+    HAS_MPL = True
+except Exception:
+    HAS_MPL = False
+
+# 🚩 MUST be the first Streamlit call (before any st.write/st.title)
 st.set_page_config(
     page_title="Requiva — Smart Lab Order Intelligence",
     page_icon="🧪",
     layout="wide",
 )
 
-# Import utilities
+# Import utilities AFTER set_page_config (utils may show st.warning/info)
 from utils import (
     USE_FIRESTORE,
     FB,
@@ -117,9 +123,9 @@ with tab_table:
 
     filtered = df.copy()
     if vendor_filter:
-        filtered = filtered[filtered["VENDOR"].str.contains(vendor_filter, case=False, na=False)]
+        filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
     if grant_filter:
-        filtered = filtered[filtered["GRANT USED"].str.contains(grant_filter, case=False, na=False)]
+        filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
@@ -133,12 +139,17 @@ with tab_analytics:
     df = load_orders()
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
-        fig, ax = plt.subplots(figsize=(8, 4))
-        counts.plot(kind="bar", ax=ax)
-        ax.set_xlabel("Item")
-        ax.set_ylabel("Orders (count)")
-        ax.set_title("Top 10 Ordered Items")
-        st.pyplot(fig)
+
+        if HAS_MPL:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            counts.plot(kind="bar", ax=ax)
+            ax.set_xlabel("Item")
+            ax.set_ylabel("Orders (count)")
+            ax.set_title("Top 10 Ordered Items")
+            st.pyplot(fig)
+        else:
+            st.info("Matplotlib not available; showing quick chart.")
+            st.bar_chart(counts)
     else:
         st.info("No data yet. Add some orders to see analytics.")
 
