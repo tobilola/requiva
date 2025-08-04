@@ -1,6 +1,7 @@
-streamlit==1.31.1
-pandas==2.1.4
-matplotlib==3.7.3
-firebase-admin==6.1.0
-google-cloud-firestore==2.11.1
-openpyxl==3.1.2
+streamlit
+pandas
+firebase-admin
+google-cloud-firestore
+openpyxl
+matplotlib
+
