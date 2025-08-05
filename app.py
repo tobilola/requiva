@@ -45,7 +45,6 @@ from utils import (
 
 # --- Status banner / quick debug ---
 st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
-st.write("Secrets keys present:", list(FB.keys()) if isinstance(FB, dict) else [])
 
 if USE_FIRESTORE:
     st.success("Connected to Firestore")
@@ -54,7 +53,6 @@ else:
 
 # --- App header ---
 st.title("Requiva — Smart Lab Order Intelligence")
-
 
 # ======================
 # ➕ New Order
