@@ -35,7 +35,6 @@ st.set_page_config(
 # Import utilities AFTER set_page_config
 from utils import (
     USE_FIRESTORE,
-    FB,
     load_orders,
     save_orders,
     gen_req_id,
