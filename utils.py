@@ -1,3 +1,5 @@
+# utils.py
+
 import os
 import json
 from datetime import datetime
@@ -10,55 +12,29 @@ REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
     "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED",
-    "RECEIVED BY", "ITEM LOCATION"
+    "RECEIVED BY", "LOCATION KEPT", "REQUESTED BY", "TIME RECEIVED",
 ]
 
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
 
 # ----------------------
-# 🔐 Firebase Setup
+# 🔐 Firebase Setup (Render-safe)
 # ----------------------
-FB = st.secrets.get("firebase", {})
-COLLECTION = FB.get("collection", "requiva_orders")
 
-def _init_firestore_from_secrets():
-    if not FB:
-        st.info("⚠️ No [firebase] secrets found. Using local CSV.")
+FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"  # 👈 Render will mount your secret file here
+
+def _init_firestore_from_file():
+    if not os.path.exists(FIREBASE_CREDENTIAL_PATH):
+        st.warning("⚠️ Firebase service account file not found. Using local CSV.")
         return None
 
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore
 
-        cred = None
-
-        # ✅ OPTION A: Full JSON (recommended)
-        if "service_account_json" in FB:
-            sa_json = FB["service_account_json"]
-            sa_info = json.loads(sa_json)
-            cred = credentials.Certificate(sa_info)
-
-        # ✅ OPTION B: Separate fields fallback
-        elif all(k in FB for k in ["project_id", "client_email", "private_key"]):
-            key = FB["private_key"].replace("\\n", "\n")
-            sa_info = {
-                "type": "service_account",
-                "project_id": FB["project_id"],
-                "private_key_id": FB.get("private_key_id", "dummy"),
-                "private_key": key,
-                "client_email": FB["client_email"],
-                "client_id": FB.get("client_id", "dummy"),
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "client_x509_cert_url": FB.get("client_x509_cert_url", ""),
-                "universe_domain": "googleapis.com"
-            }
-            cred = credentials.Certificate(sa_info)
-
-        if cred is None:
-            st.warning("⚠️ Firebase secrets found but incomplete. Cannot initialize Firestore.")
-            return None
+        with open(FIREBASE_CREDENTIAL_PATH, "r") as f:
+            sa_info = json.load(f)
+        cred = credentials.Certificate(sa_info)
 
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -66,11 +42,11 @@ def _init_firestore_from_secrets():
         return firestore.client()
 
     except Exception as e:
-        st.warning(f"⚠️ Firestore init failed. Using CSV. \n\nDetails: {e}")
+        st.warning(f"⚠️ Firebase init failed. Using CSV. \n\nDetails: {e}")
         return None
 
 # 🔄 Initialize Firestore client
-db = _init_firestore_from_secrets()
+db = _init_firestore_from_file()
 USE_FIRESTORE = db is not None
 
 # ----------------------
@@ -90,7 +66,7 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_orders() -> pd.DataFrame:
     if USE_FIRESTORE and db:
-        docs = db.collection(COLLECTION).stream()
+        docs = db.collection("requiva_orders").stream()
         rows = [d.to_dict() for d in docs]
         df = pd.DataFrame(rows)
         return _ensure_columns(df) if not df.empty else pd.DataFrame(columns=REQUIRED_COLUMNS)
@@ -105,7 +81,7 @@ def save_orders(df: pd.DataFrame):
     if USE_FIRESTORE and db:
         from google.cloud import firestore as _fs
         batch = db.batch()
-        col_ref = db.collection(COLLECTION)
+        col_ref = db.collection("requiva_orders")
         for _, row in df.iterrows():
             req_id = str(row["REQ#"])
             if not req_id or req_id.lower() == "nan":
